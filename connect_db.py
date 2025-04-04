@@ -4,6 +4,6 @@ def connect_db():
     return mysql.connector.connect(
         host="localhost",
         user="root",
-        password="Redtop12@",
+        password="password",
         database="library_boron"
     )
