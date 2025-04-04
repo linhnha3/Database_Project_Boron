@@ -4,29 +4,32 @@ def search(query):
     conn = connect_db()
     cursor = conn.cursor(dictionary=True)
 
-    like_query = f"%{query.strip().upper()}%"
+    where_clause = ''
 
-    cursor.execute("""
-        SELECT 
-            b.Isbn,
-            b.Title,
-            GROUP_CONCAT(DISTINCT a.Name ORDER BY a.Name SEPARATOR ', ') AS Authors,
+    cursor.execute('SELECT * FROM INFORMATION_SCHEMA.INNODB_FT_DEFAULT_STOPWORD')
+    stopwords = cursor.fetchall()
+
+    #If query is only a stopword, do substring matching
+    if query.lower() in [row['value'] for row in stopwords]:
+        like_query = f"%{query.strip().upper()}%"
+        where_clause = f"Title LIKE '{like_query}' OR Authors LIKE '{like_query}'"
+    else:
+        #Full-text matching
+        where_clause = f"""MATCH(Isbn, Title, Authors) AGAINST('{query}' IN NATURAL LANGUAGE MODE) """
+    
+    cursor.execute(f"""
+        SELECT *, 
             CASE 
                 WHEN EXISTS (
-                    SELECT 1 FROM BOOK_LOANS bl
+                    SELECT 1 FROM BOOK_LOANS bl, BOOK b
                     WHERE bl.Isbn = b.Isbn AND bl.date_in IS NULL
                 ) THEN 'OUT'
                 ELSE 'IN'
             END AS Status
-        FROM BOOK b
-        JOIN BOOK_AUTHORS ba ON b.Isbn = ba.Isbn
-        JOIN AUTHORS a ON ba.Author_id = a.Author_id
-        GROUP BY b.Isbn, b.Title
-        HAVING 
-            LOCATE(b.Isbn, %s) > 0 OR 
-            b.Title LIKE %s OR 
-            Authors LIKE %s
-    """, (query, like_query, like_query))
+        FROM FULL_BOOK
+        WHERE {where_clause} 
+        LIMIT 50
+    """)
 
     results = cursor.fetchall()
     cursor.close()
