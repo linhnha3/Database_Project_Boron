@@ -20,7 +20,10 @@ next_id = 1   #To create unique author ids
 for _, row in books.iterrows():
     names = row['Author'].split(",")
     for n in names:
-        n = n.replace('.', '. ').replace('  ', ' ').strip().upper()
+        #Normalize author names to have no spaces between inital letters (X.X. LASTNAME)
+        n = n.replace('. ', '.').strip().upper()
+        new = '. '
+        n = new.join(n.rsplit('.', 1)).replace('  ', ' ')
         #If new author, create id and add to authors and book_authors
         if n not in authors['Name'].values:
             authors.loc[len(authors)] = [next_id, n]
