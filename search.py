@@ -1,104 +1,124 @@
 import re
 from connect_db import connect_db
 
+
 def normalize_initials(name):
-    # Normalize initials to non-space separated format: "J. K." becomes "J.K."
+    # Normalize initials to a non-space separated format (e.g. "J. K." becomes "J.K.")
     return re.sub(r'([A-Za-z])\.\s*', r'\1.', name).strip()
+
 
 def search(query):
     conn = connect_db()
     cursor = conn.cursor(dictionary=True)
     query = query.strip()
 
-    isbn_candidate = None
-    title_terms = []
-    author_terms = []
-
-    # Split the query into tokens.
+    # Extract ISBN Tokens
     tokens = query.split()
-
-    # Look for a token that looks like an ISBN (digits/hyphens, length 10+)
+    isbn_tokens = []
+    non_isbn_tokens = []
     for token in tokens:
-        token_clean = token.replace(" ", "")
-        if all(c.isdigit() or c == '-' for c in token_clean) and len(token_clean) >= 10:
-            isbn_candidate = token_clean
-            break
+        cleaned = token.replace("-", "")
+        # Assume an ISBN-10 is a token of 10 digits after removing hyphens
+        if cleaned.isdigit() and len(cleaned) == 10:
+            isbn_tokens.append(token.replace(" ", ""))
+        else:
+            non_isbn_tokens.append(token)
 
-    # Remove the ISBN token from further processing.
-    filtered_tokens = [token for token in tokens
-                       if not (isbn_candidate and token.replace(" ", "") == isbn_candidate)]
+    # Normalize non-ISBN tokens (e.g. "J. K." -> "J.K.")
+    non_isbn_tokens = [normalize_initials(token) for token in non_isbn_tokens]
 
-    # Check for an explicit " by " separator.
-    if " by " in query.lower():
-        index = query.lower().find(" by ")
-        title_part = query[:index]
-        author_part = query[index + 4:]
-        title_terms = [term.strip() for term in title_part.split() if term.strip()]
-        author_terms = [normalize_initials(term.strip()) for term in author_part.split() if term.strip()]
-    else:
-        # Use a heuristic: if any token contains a dot, assume that token and all subsequent tokens are author tokens.
-        found_author = False
-        for token in filtered_tokens:
-            if not found_author and '.' in token:
-                found_author = True
-            if found_author:
-                author_terms.append(normalize_initials(token))
-            else:
-                title_terms.append(token)
-        # If no token qualifies as an author, assume all tokens are title tokens.
-        if not author_terms:
-            title_terms = filtered_tokens
-
-    # Build query conditions.
-    conditions = []
+    # We want to return a book if it matches any of:
+    #   a) its ISBN is one of the provided tokens,
+    #   b) its title matches at least one non-ISBN token,
+    #   c) one of its authors matches at least one non-ISBN token.
+    where_clauses = []
     params = []
 
-    # 1. ISBN condition (exact match)
-    if isbn_candidate:
-        conditions.append("b.Isbn = %s")
-        params.append(isbn_candidate)
+    if isbn_tokens:
+        placeholders = ", ".join(["%s"] * len(isbn_tokens))
+        isbn_condition = f"b.Isbn IN ({placeholders})"
+        where_clauses.append(isbn_condition)
+        params.extend(isbn_tokens)
 
-    # 2. Title condition (exact and fuzzy matching)
-    if title_terms:
-        title_conditions = []
-        for term in title_terms:
-            title_conditions.append("(b.Title LIKE %s OR SOUNDEX(b.Title) = SOUNDEX(%s))")
-            params.append(f"%{term}%")
-            params.append(term)
-        # Require all title terms to appear.
-        conditions.append("(" + " AND ".join(title_conditions) + ")")
+    # Fuzzy matching on title: check if the title contains any non-ISBN token.
+    if non_isbn_tokens:
+        title_fuzzy = " OR ".join(["b.Title LIKE %s" for _ in non_isbn_tokens])
+        where_clauses.append(f"({title_fuzzy})")
+        for token in non_isbn_tokens:
+            params.append(f"%{token}%")
 
-    # 3. Author condition (fuzzy matching)
-    if author_terms:
-        author_conditions = []
-        for term in author_terms:
-            author_conditions.append("(a.Name LIKE %s OR SOUNDEX(a.Name) = SOUNDEX(%s))")
-            params.append(f"%{term}%")
-            params.append(term)
-        author_subquery = """
+        # Fuzzy matching on authors: using a subquery so we don't join AUTHORS directly.
+        author_fuzzy = " OR ".join(["a.Name LIKE %s" for _ in non_isbn_tokens])
+        author_subquery = f"""
             EXISTS (
-                SELECT 1 FROM BOOK_AUTHORS ba 
-                JOIN AUTHORS a ON ba.Author_id = a.Author_id 
-                WHERE ba.Isbn = b.Isbn AND ({})
+                SELECT 1 FROM BOOK_AUTHORS ba
+                JOIN AUTHORS a ON ba.Author_id = a.Author_id
+                WHERE ba.Isbn = b.Isbn AND ({author_fuzzy})
             )
-        """.format(" AND ".join(author_conditions))
-        conditions.append(author_subquery)
+        """
+        where_clauses.append(author_subquery)
+        for token in non_isbn_tokens:
+            params.append(f"%{token}%")
 
-    # Combine the conditions with OR so that:
-    # - The exact ISBN match is returned if provided.
-    # - Books matching the title fuzzy search are returned.
-    # - Books matching the author fuzzy search are returned.
-    # This produces a union of results.
-    where_clause = " OR ".join(conditions) if conditions else "1=0"
+    # Combine all fuzzy conditions with OR so that if any condition holds, the book is returned.
+    if where_clauses:
+        overall_where = " OR ".join(f"({wc})" for wc in where_clauses)
+    else:
+        overall_where = "1=1"
 
+    #  Build the Match Score Expression
+    # (a) ISBN bonus: 100 points if the book’s ISBN is among the provided tokens.
+    if isbn_tokens:
+        placeholders = ", ".join(["%s"] * len(isbn_tokens))
+        isbn_bonus = f"CASE WHEN b.Isbn IN ({placeholders}) THEN 100 ELSE 0 END"
+        # We'll add the same ISBN tokens for the scoring expression.
+        isbn_bonus_params = isbn_tokens.copy()
+    else:
+        isbn_bonus = "0"
+        isbn_bonus_params = []
+
+    # (b) Title score: For each non-ISBN token, add 1 point if b.Title matches.
+    title_score_expr = ""
+    title_score_params = []
+    if non_isbn_tokens:
+        title_score_parts = []
+        for token in non_isbn_tokens:
+            title_score_parts.append("CASE WHEN b.Title LIKE %s THEN 1 ELSE 0 END")
+            title_score_params.append(f"%{token}%")
+        title_score_expr = " + ".join(title_score_parts)
+    else:
+        title_score_expr = "0"
+
+    # (c) Author score: Use a subquery to sum points for each non-ISBN token match in any author.
+    author_score_expr = ""
+    author_score_params = []
+    if non_isbn_tokens:
+        # For each token, we sum up a CASE over the authors.
+        author_score_parts = []
+        for token in non_isbn_tokens:
+            author_score_parts.append(
+                "(SELECT COALESCE(SUM(CASE WHEN a.Name LIKE %s THEN 1 ELSE 0 END), 0) FROM BOOK_AUTHORS ba JOIN AUTHORS a ON ba.Author_id = a.Author_id WHERE ba.Isbn = b.Isbn)"
+            )
+            author_score_params.append(f"%{token}%")
+        author_score_expr = " + ".join(author_score_parts)
+    else:
+        author_score_expr = "0"
+
+    match_score_expr = f"({isbn_bonus} + {title_score_expr} + {author_score_expr})"
+
+    # Combine all parameters in order
+    all_params = params + isbn_bonus_params + title_score_params + author_score_params
+
+    # Build Final SQL Query
     sql = f"""
         SELECT 
             b.Isbn,
             b.Title,
             (SELECT GROUP_CONCAT(DISTINCT a.Name ORDER BY a.Name SEPARATOR ', ')
-             FROM BOOK_AUTHORS ba
-             JOIN AUTHORS a ON ba.Author_id = a.Author_id
+             FROM BOOK_AUTHORS ba 
+             JOIN AUTHORS a ON ba.Author_id = a.Author_id 
              WHERE ba.Isbn = b.Isbn) AS Authors,
+            {match_score_expr} AS match_score,
             CASE 
                 WHEN EXISTS (
                     SELECT 1 FROM BOOK_LOANS bl
@@ -107,20 +127,13 @@ def search(query):
                 ELSE 'IN'
             END AS Status
         FROM BOOK b
-        WHERE {where_clause}
+        WHERE {overall_where}
         GROUP BY b.Isbn, b.Title
-        ORDER BY 
-            CASE WHEN b.Isbn = %s THEN 0 ELSE 1 END,
-            LENGTH(b.Title)
-        LIMIT 50
+        HAVING match_score >= 2
+        ORDER BY match_score DESC, LENGTH(b.Title)
     """
-    # Append ISBN candidate for ordering if available.
-    if isbn_candidate:
-        params.append(isbn_candidate)
-    else:
-        params.append('')
 
-    cursor.execute(sql, params)
+    cursor.execute(sql, all_params)
     results = cursor.fetchall()
     cursor.close()
     conn.close()
@@ -129,6 +142,8 @@ def search(query):
         print("No matching books found.")
         return
 
+    # Should return results directly but for now we print.
     print("\nMatching Books:")
     for i, row in enumerate(results, 1):
-        print(f"{i}: {row['Isbn']} | {row['Title']} | {row['Authors']} | {row['Status']}")
+        print(f"{i}: {row['Isbn']} | {row['Title']} | {row['Authors']} | {row['Status']} (Score: {row['match_score']})")
+
