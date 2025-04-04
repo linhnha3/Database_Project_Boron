@@ -14,8 +14,24 @@ def search(query):
         like_query = f"%{query.strip().upper()}%"
         where_clause = f"Title LIKE '{like_query}' OR Authors LIKE '{like_query}'"
     else:
-        #Full-text matching
-        where_clause = f"""MATCH(Isbn, Title, Authors) AGAINST('{query}' IN NATURAL LANGUAGE MODE) """
+        # Extract ISBN Tokens
+        tokens = query.split()
+        isbn_tokens = []
+        for token in tokens:
+            cleaned = token.replace("-", "")
+            # Assume an ISBN-10 is a token of 10 digits/letters after removing hyphens
+            if cleaned.isalnum() and len(cleaned) == 10:
+                isbn_tokens.append(token.replace(" ", ""))
+        
+        #If no ISBNs found, do general search on full query
+        if not isbn_tokens:
+            where_clause = f"""MATCH(Isbn, Title, Authors) AGAINST('{query}' IN NATURAL LANGUAGE MODE) """
+        else:
+            #Match by only ISBN(s)
+            isbns = ''
+            for isbn in isbn_tokens:
+                isbns += isbn + " "
+            where_clause = f"""MATCH(Isbn, Title, Authors) AGAINST('{isbns}' IN NATURAL LANGUAGE MODE) """
     
     cursor.execute(f"""
         SELECT *, 
@@ -28,7 +44,7 @@ def search(query):
             END AS Status
         FROM FULL_BOOK
         WHERE {where_clause} 
-        LIMIT 50
+        LIMIT 100
     """)
 
     results = cursor.fetchall()

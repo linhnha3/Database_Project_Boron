@@ -1,8 +1,8 @@
 import pandas as pd
 
 #Read books and borrorwers in as dataframes
-books = pd.read_csv('books.csv', sep='\t')
-borrowers = pd.read_csv('borrowers.csv')
+books = pd.read_csv('./library_data/books.csv', sep='\t')
+borrowers = pd.read_csv('./library_data/borrowers.csv')
 
 #Copy ISBN10 and Title from books into book.csv with uppercase convention
 book = pd.DataFrame(columns=['Isbn', 'Title'])
@@ -46,7 +46,7 @@ borrower['Address'] = borrowers['address']
 borrower['Phone'] = borrowers['phone']
 
 #Export all dataframes to csv files
-book.to_csv('book.csv', sep='\t', index=False)
-book_authors.to_csv('book_authors.csv', index=False)
-authors.to_csv('authors.csv', index=False)
-borrower.to_csv('borrower.csv', index=False)
+book.to_csv('./library_data/book.csv', sep='\t', index=False)
+book_authors.to_csv('./library_data/book_authors.csv', index=False)
+authors.to_csv('./library_data/authors.csv', index=False)
+borrower.to_csv('./library_data/borrower.csv', index=False)
