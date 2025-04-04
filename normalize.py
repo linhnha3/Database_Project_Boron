@@ -7,7 +7,7 @@ borrowers = pd.read_csv('borrowers.csv')
 #Copy ISBN10 and Title from books into book.csv with uppercase convention
 book = pd.DataFrame(columns=['Isbn', 'Title'])
 book['Isbn'] = books['ISBN10']
-book['Title'] = book['Title'].str.upper()
+book['Title'] = books['Title'].str.upper()
 
 #Create dataframes for book_authors and authors
 book_authors = pd.DataFrame(columns=['Author_id', 'Isbn'])
@@ -20,7 +20,7 @@ next_id = 1   #To create unique author ids
 for _, row in books.iterrows():
     names = row['Author'].split(",")
     for n in names:
-        n = n.strip().upper()
+        n = n.replace('.', '. ').replace('  ', ' ').strip().upper()
         #If new author, create id and add to authors and book_authors
         if n not in authors['Name'].values:
             authors.loc[len(authors)] = [next_id, n]
