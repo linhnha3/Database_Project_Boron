@@ -45,5 +45,6 @@ def add_borrower():
         new_id = get_new_card_id()
         cursor.execute('INSERT INTO BORROWER VALUES (%s, %s, %s, %s, %s)', (new_id, ssn, name, address, phone))
         conn.commit()
-        conn.close()
         print(f'\n✅ Borrower {new_id} has been successfully added.')
+    
+    conn.close()
