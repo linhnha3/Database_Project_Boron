@@ -88,3 +88,4 @@ def pay_fines():
     cursor.close()
     conn.close()
     print(f"✅ All eligible fines for Borrower {card_id} have been paid.")
+
