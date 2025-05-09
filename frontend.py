@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import simpledialog, messagebox
+from tkinter import simpledialog, messagebox, Canvas, Scrollbar, Frame
 from connect_db import connect_db
 from datetime import datetime
 from search import search
@@ -22,6 +22,7 @@ def show_large_popup(title, text):
     close_button = tk.Button(popup, text="Close", command=popup.destroy)
     close_button.pack(pady=5)
 
+""" Deprecated method
 def search_books():
     query = simpledialog.askstring("Search Books", "Enter search term (ISBN, Title, or Author):")
     if query:
@@ -35,6 +36,182 @@ def search_books():
             result_text += f"{i}: {row['Isbn']} | {row['Title']} | {row['Authors']} | {row['Status']}\n"
 
         show_large_popup("Search Results", result_text)
+"""
+
+
+def get_book_status(isbn):
+    """
+    Checks if a book is currently available or checked out by querying BOOK_LOANS.
+    Returns "Available" or "Checked Out"
+    """
+    conn = None
+    cursor = None
+    try:
+        conn = connect_db()
+        cursor = conn.cursor()
+        # Check for an active loan (date_in IS NULL)
+        cursor.execute("""
+            SELECT 1 FROM BOOK_LOANS
+            WHERE Isbn = %s AND date_in IS NULL
+            LIMIT 1
+        """, (isbn,))
+
+        if cursor.fetchone():  # If a record is found, it means there's an active loan
+            return "Checked Out"
+        else:
+            return "Available"  # No active loan found for this ISBN
+
+    except Exception as e:
+        print(f"Database error in get_book_status for ISBN {isbn}: {e}")
+        return "Status Unknown"
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+def checkout_from_search_gui(isbn, parent_window, refresh_callback=None):  # Added refresh_callback
+    """
+    Handles the checkout process initiated from the search results window.
+    Prompts for Card ID, calls the main checkout_book function,
+    and then calls the refresh_callback if provided and checkout was successful.
+    """
+    # Adapted from existing checkout method.
+    update_fines()
+    card_id = simpledialog.askstring("Checkout Book",
+                                     f"Enter Borrower's Card ID for ISBN: {isbn}",
+                                     parent=parent_window)
+
+    needs_refresh = False
+    if card_id:  # Proceed if a Card ID was entered
+        result_message = checkout_book(isbn, card_id)  # This is your backend checkout logic
+        messagebox.showinfo("Checkout Status", result_message, parent=parent_window)
+        # Should consider a more robust method for determining successes
+        if "✅" in result_message or "successfully checked out" in result_message.lower():
+            needs_refresh = True
+
+    elif card_id == "":  # User pressed OK but left the Card ID field empty
+        messagebox.showwarning("Input Error", "Card ID cannot be empty.", parent=parent_window)
+    # If card_id is None (user pressed Cancel), do nothing specific for refresh.
+
+    if needs_refresh and refresh_callback:
+        print("Refreshing search results...")  # For debugging
+        refresh_callback()
+
+
+def search_books_with_checkout():
+    """
+    Prompts for a search term, displays results (fetching status separately)
+    in a new window with an option to checkout available books.
+    """
+    # Prompt for the initial search query
+    search_query_dialog_val = simpledialog.askstring("Search Books", "Enter search term (ISBN, Title, or Author):")
+    if not search_query_dialog_val:
+        return  # User cancelled or entered nothing
+
+    current_search_query_holder = [search_query_dialog_val]
+
+    results_window = tk.Toplevel()
+    results_window.title("Search Results")
+    results_window.geometry("950x600")
+
+    main_frame = Frame(results_window)
+    main_frame.pack(fill=tk.BOTH, expand=True)
+
+    canvas = Canvas(main_frame)
+    scrollbar = Scrollbar(main_frame, orient=tk.VERTICAL, command=canvas.yview)
+
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    content_frame = Frame(canvas)
+    content_frame_window_id = canvas.create_window((0, 0), window=content_frame, anchor="nw")
+
+    def do_populate_or_refresh_results():
+        current_query = current_search_query_holder[0]
+
+        # Clear previous results from content_frame
+        for widget in content_frame.winfo_children():
+            widget.destroy()
+
+        # Re-add headers
+        header_bg = "lightgrey";
+        header_font = ('Arial', 10, 'bold')
+        header_frame_rf = Frame(content_frame, bg=header_bg)
+        header_frame_rf.pack(fill="x", pady=(0, 5))
+        tk.Label(header_frame_rf, text="ISBN", width=15, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
+        tk.Label(header_frame_rf, text="Title", width=35, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
+        tk.Label(header_frame_rf, text="Authors", width=30, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
+        tk.Label(header_frame_rf, text="Status", width=12, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
+        tk.Label(header_frame_rf, text="Action", width=15, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
+
+        initial_results = search(current_query, return_results=True)
+
+        if not initial_results:
+            tk.Label(content_frame, text=f"No matching books found for query: '{current_query}'").pack(pady=10)
+            content_frame.update_idletasks()
+            canvas.config(scrollregion=canvas.bbox("all"))
+            return
+
+        # Process results (get status for each book)
+        processed_results_rf = []
+        for book_row in initial_results:
+            isbn = book_row.get('Isbn')
+            status = "ISBN Missing"  # Default status
+            if isbn:
+                status = get_book_status(isbn)
+            book_row['computed_status'] = status
+            processed_results_rf.append(book_row)
+
+        # Display new results
+        for row_data in processed_results_rf:
+            book_entry_frame_rf = Frame(content_frame)
+            book_entry_frame_rf.pack(fill="x", pady=2, padx=2)
+            # Add labels for ISBN, Title, Authors
+            tk.Label(book_entry_frame_rf, text=row_data.get('Isbn', 'N/A'), width=15, anchor="w").pack(side=tk.LEFT,padx=5)
+            tk.Label(book_entry_frame_rf, text=row_data.get('Title', 'N/A'), width=35, anchor="w", wraplength=240).pack(side=tk.LEFT, padx=5)
+            tk.Label(book_entry_frame_rf, text=row_data.get('Authors', 'N/A'), width=30, anchor="w",wraplength=200).pack(side=tk.LEFT, padx=5)
+            tk.Label(book_entry_frame_rf, text=row_data.get('computed_status', 'N/A'), width=12, anchor="w").pack(side=tk.LEFT, padx=5)
+
+            action_frame_rf = Frame(book_entry_frame_rf, width=110)
+            action_frame_rf.pack(side=tk.LEFT, padx=5, fill="x", expand=True)
+
+            # For anyone curious, this is how I implemented the checkout.
+            if row_data.get('computed_status', '').lower() == 'available':
+                checkout_button_rf = tk.Button(action_frame_rf, text="Checkout",
+                                               command=lambda isbn_val=row_data.get('Isbn'):
+                                               checkout_from_search_gui(isbn_val, results_window,
+                                                                        do_populate_or_refresh_results))
+                checkout_button_rf.pack(anchor="w")
+            else:
+                tk.Label(action_frame_rf, text="", width=10).pack(anchor="w")
+
+        content_frame.update_idletasks()
+        canvas.config(scrollregion=canvas.bbox("all"))
+
+    # Initial population of search results
+    do_populate_or_refresh_results()
+
+    def on_canvas_configure(event):
+        canvas_width = event.width
+        canvas.itemconfig(content_frame_window_id, width=canvas_width)
+        canvas.config(scrollregion=canvas.bbox("all"))
+
+    canvas.bind("<Configure>", on_canvas_configure)
+
+    def on_content_frame_configure(event):
+        canvas.config(scrollregion=canvas.bbox("all"))
+
+    content_frame.bind("<Configure>", on_content_frame_configure)
+
+    results_window.update_idletasks()
+    canvas.config(scrollregion=canvas.bbox("all"))
+
+    close_button = tk.Button(results_window, text="Close", command=results_window.destroy)
+    close_button.pack(pady=10)
+
 
 def checkout_book_gui():
     update_fines()
@@ -124,7 +301,7 @@ def main():
 
     # Define buttons and actions
     actions = [
-        ("\ud83d\udd0d Search Books", search_books),
+        ("\ud83d\udd0d Search Books", search_books_with_checkout),
         ("\ud83d\udcd6 Checkout Book", checkout_book_gui),
         ("\ud83d\udce5 Checkin Book", checkin_book_gui),
         ("\ud83d\udcb5 Pay Fines", pay_fines_gui),
