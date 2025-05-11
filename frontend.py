@@ -149,8 +149,8 @@ def search_books_with_checkout():
         header_frame_rf.pack(fill="x", pady=(0, 5))
         tk.Label(header_frame_rf, text="ISBN", width=15, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
         tk.Label(header_frame_rf, text="Title", width=35, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
-        tk.Label(header_frame_rf, text="Authors", width=30, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
-        tk.Label(header_frame_rf, text="Status", width=12, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
+        tk.Label(header_frame_rf, text="Authors", width=20, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
+        tk.Label(header_frame_rf, text="Status", width=10, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
         tk.Label(header_frame_rf, text="Borrower ID", width=12, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
         tk.Label(header_frame_rf, text="Action", width=15, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
 
@@ -185,10 +185,12 @@ def search_books_with_checkout():
             tk.Label(book_entry_frame_rf, text=row_data.get('Authors', 'N/A'), width=30, anchor="w",wraplength=180).pack(side=tk.LEFT, padx=5)
             tk.Label(book_entry_frame_rf, text=row_data.get('computed_status', 'N/A'), width=12, anchor="w").pack(side=tk.LEFT, padx=5)
 
-            # Display Borrower ID if book is checked out
+            # Display Borrower ID if book is checked out and NULL if not
             borrower_display_text = ""
             if row_data.get('computed_status') == "Checked Out":
                 borrower_display_text = row_data.get('borrower_id', 'N/A')
+            else:
+                borrower_display_text = "NULL"
             tk.Label(book_entry_frame_rf, text=borrower_display_text, width=12, anchor="w").pack(side=tk.LEFT, padx=5)
 
             action_frame_rf = Frame(book_entry_frame_rf, width=110)
