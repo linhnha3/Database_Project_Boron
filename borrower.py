@@ -17,7 +17,7 @@ def add_borrower():
     # SSN validation
     ssn_pattern = r'\d{3}-\d{2}-\d{4}'
     while True:
-        ssn = simpledialog.askstring("Add Borrower", "Enter SSN (xxx-xx-xxxx):")
+        ssn = simpledialog.askstring("Add Borrower", "Enter SSN as xxx-xx-xxxx:")
         if ssn is None:
             return
         if re.fullmatch(ssn_pattern, ssn):
@@ -38,15 +38,16 @@ def add_borrower():
     if not address: return
 
     # Phone validation
-    phone_pattern = r'\\d{3}-\d{3}-\d{4}'
+    phone_pattern = r'\(\d{3}\) \d{3}-\d{4}'
     while True:
-        phone = simpledialog.askstring("Add Borrower", "Enter Phone xxx-xxx-xxxx or leave blank:")
-        if phone in (None, ""):
-            phone = None
+        phone = simpledialog.askstring("Add Borrower", "Enter Phone Number as (xxx) xxx-xxxx or leave blank:")
+        if phone is None:
+            return
+        elif phone == "":
             break
         if re.fullmatch(phone_pattern, phone):
             break
-        messagebox.showerror("Invalid Phone", "❌ Format must be xxx-xxx-xxxx or blank.")
+        messagebox.showerror("Invalid Phone", "❌ Format must be (xxx) xxx-xxxx or blank.")
 
     new_id = get_new_card_id()
 

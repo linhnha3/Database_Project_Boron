@@ -39,7 +39,11 @@ def search_books():
 def checkout_book_gui():
     update_fines()
     isbn = simpledialog.askstring("Checkout Book", "Enter ISBN to Check Out:")
+    if isbn is None:
+        return
     card_id = simpledialog.askstring("Checkout Book", "Enter Borrower's Card ID:")
+    if card_id is None:
+        return
     if isbn and card_id:
         checkout_book(isbn, card_id)
         messagebox.showinfo("Checkout", "Checkout successful (or see terminal for errors).")
@@ -58,7 +62,6 @@ def pay_fines_gui():
 
 def add_borrower_gui():
     add_borrower()
-    messagebox.showinfo("Add Borrower", "Borrower added successfully (or see terminal for errors).")
 
 def checkin_book_gui():
     isbn = simpledialog.askstring("Checkin Book", "Enter ISBN to Check In (or leave blank):")
