@@ -137,7 +137,7 @@ def search_books_with_checkout():
             widget.destroy()
 
         # Re-add headers
-        header_bg = "lightgrey";
+        header_bg = "lightgrey"
         header_font = ('Arial', 10, 'bold')
         header_frame_rf = Frame(content_frame, bg=header_bg)
         header_frame_rf.pack(fill="x", pady=(0, 5))
@@ -221,13 +221,6 @@ def checkout_book_gui():
         checkout_book(isbn, card_id)
         messagebox.showinfo("Checkout", "Checkout successful (or see terminal for errors).")
 
-def checkin_book_gui():
-    isbn = simpledialog.askstring("Checkin Book", "Enter ISBN to Check In (or leave blank):")
-    card_id = simpledialog.askstring("Checkin Book", "Enter Borrower's Card ID (or leave blank):")
-    name = simpledialog.askstring("Checkin Book", "Enter Borrower Name (or leave blank):")
-    checkin_book(isbn, card_id, name)
-    messagebox.showinfo("Checkin", "Checkin successful (or see terminal for errors).")
-
 def pay_fines_gui():
     update_fines()
     pay_fines()
@@ -245,7 +238,7 @@ def checkin_book_gui():
     loans = checkin_book(isbn, card_id, name)
 
     if not loans:
-        messagebox.showinfo("Checkin", "❌ No active loan found for this book and borrower.")
+        messagebox.showinfo("Checkin", "No active loan found for this book or borrower.")
         return
 
     # Prepare loan options
@@ -288,7 +281,7 @@ def confirm_checkin(loan_id):
     cursor.close()
     conn.close()
 
-    messagebox.showinfo("Checkin", f"✅ Book Loan {loan_id} successfully checked in!")
+    messagebox.showinfo("Checkin", f"Book Loan {loan_id} successfully checked in!")
 
 
 def main():
