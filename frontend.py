@@ -50,26 +50,32 @@ def get_book_status(isbn):
         conn = connect_db()
         cursor = conn.cursor()
         # Check for an active loan (date_in IS NULL)
-        cursor.execute("""
-            SELECT 1 FROM BOOK_LOANS
-            WHERE Isbn = %s AND date_in IS NULL
-            LIMIT 1
-        """, (isbn,))
+        cursor = conn.cursor(dictionary=True)
 
-        if cursor.fetchone():  # If a record is found, it means there's an active loan
-            return "Checked Out"
+        cursor.execute("""
+                    SELECT Card_id FROM BOOK_LOANS
+                    WHERE Isbn = %s AND date_in IS NULL
+                    LIMIT 1
+                """, (isbn,))
+
+        loan_record = cursor.fetchone()
+
+        if loan_record:
+            # Book has an active loan
+            return {"status": "Checked Out", "borrower_id": loan_record['Card_id']}
         else:
-            return "Available"  # No active loan found for this ISBN
+            # No active loan found for this ISBN
+            return {"status": "Available", "borrower_id": None}
 
     except Exception as e:
-        print(f"Database error in get_book_status for ISBN {isbn}: {e}")
-        return "Status Unknown"
+        print(f"Database error in get_book_status_and_borrower for ISBN {isbn}: {e}")
+        # Log error appropriately
+        return {"status": "Status Unknown", "borrower_id": None}
     finally:
         if cursor:
             cursor.close()
-        if conn and conn.is_connected():
+        if conn and conn.is_connected():  # Check if connection was successful and is still open
             conn.close()
-
 
 def checkout_from_search_gui(isbn, parent_window, refresh_callback=None):  # Added refresh_callback
     """
@@ -114,7 +120,7 @@ def search_books_with_checkout():
 
     results_window = tk.Toplevel()
     results_window.title("Search Results")
-    results_window.geometry("950x600")
+    results_window.geometry("1100x600")
 
     main_frame = Frame(results_window)
     main_frame.pack(fill=tk.BOTH, expand=True)
@@ -145,6 +151,7 @@ def search_books_with_checkout():
         tk.Label(header_frame_rf, text="Title", width=35, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
         tk.Label(header_frame_rf, text="Authors", width=30, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
         tk.Label(header_frame_rf, text="Status", width=12, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
+        tk.Label(header_frame_rf, text="Borrower ID", width=12, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
         tk.Label(header_frame_rf, text="Action", width=15, font=header_font, anchor="w", bg=header_bg).pack(side=tk.LEFT, padx=5, pady=2)
 
         initial_results = search(current_query, return_results=True)
@@ -159,10 +166,13 @@ def search_books_with_checkout():
         processed_results_rf = []
         for book_row in initial_results:
             isbn = book_row.get('Isbn')
-            status = "ISBN Missing"  # Default status
             if isbn:
                 status = get_book_status(isbn)
-            book_row['computed_status'] = status
+                book_row['computed_status'] = status['status']
+                book_row['borrower_id'] = status['borrower_id']
+            else:
+                book_row['computed_status'] = "ISBN Missing"
+                book_row['borrower_id'] = None
             processed_results_rf.append(book_row)
 
         # Display new results
@@ -171,9 +181,15 @@ def search_books_with_checkout():
             book_entry_frame_rf.pack(fill="x", pady=2, padx=2)
             # Add labels for ISBN, Title, Authors
             tk.Label(book_entry_frame_rf, text=row_data.get('Isbn', 'N/A'), width=15, anchor="w").pack(side=tk.LEFT,padx=5)
-            tk.Label(book_entry_frame_rf, text=row_data.get('Title', 'N/A'), width=35, anchor="w", wraplength=240).pack(side=tk.LEFT, padx=5)
-            tk.Label(book_entry_frame_rf, text=row_data.get('Authors', 'N/A'), width=30, anchor="w",wraplength=200).pack(side=tk.LEFT, padx=5)
+            tk.Label(book_entry_frame_rf, text=row_data.get('Title', 'N/A'), width=35, anchor="w", wraplength=220).pack(side=tk.LEFT, padx=5)
+            tk.Label(book_entry_frame_rf, text=row_data.get('Authors', 'N/A'), width=30, anchor="w",wraplength=180).pack(side=tk.LEFT, padx=5)
             tk.Label(book_entry_frame_rf, text=row_data.get('computed_status', 'N/A'), width=12, anchor="w").pack(side=tk.LEFT, padx=5)
+
+            # Display Borrower ID if book is checked out
+            borrower_display_text = ""
+            if row_data.get('computed_status') == "Checked Out":
+                borrower_display_text = row_data.get('borrower_id', 'N/A')
+            tk.Label(book_entry_frame_rf, text=borrower_display_text, width=12, anchor="w").pack(side=tk.LEFT, padx=5)
 
             action_frame_rf = Frame(book_entry_frame_rf, width=110)
             action_frame_rf.pack(side=tk.LEFT, padx=5, fill="x", expand=True)
