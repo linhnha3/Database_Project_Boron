@@ -43,7 +43,6 @@ def update_fines():
     conn.commit()
     cursor.close()
     conn.close()
-    print("✅ Fines updated.")
 
 def pay_fines():
     conn = connect_db()

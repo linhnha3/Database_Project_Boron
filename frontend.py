@@ -240,8 +240,8 @@ def checkout_book_gui():
     if card_id is None:
         return
     if isbn and card_id:
-        checkout_book(isbn, card_id)
-        messagebox.showinfo("Checkout", "Checkout successful (or see terminal for errors).")
+        result = checkout_book(isbn, card_id)
+        messagebox.showinfo("Checkout", result)
 
 def pay_fines_gui():
     update_fines()
