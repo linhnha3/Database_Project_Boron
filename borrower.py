@@ -40,13 +40,13 @@ def add_borrower():
     # Phone validation
     phone_pattern = r'\\d{3}-\d{3}-\d{4}'
     while True:
-        phone = simpledialog.askstring("Add Borrower", "Enter Phone ((xxx) xxx-xxxx) or leave blank:")
+        phone = simpledialog.askstring("Add Borrower", "Enter Phone xxx-xxx-xxxx or leave blank:")
         if phone in (None, ""):
             phone = None
             break
         if re.fullmatch(phone_pattern, phone):
             break
-        messagebox.showerror("Invalid Phone", "❌ Format must be (xxx) xxx-xxxx or blank.")
+        messagebox.showerror("Invalid Phone", "❌ Format must be xxx-xxx-xxxx or blank.")
 
     new_id = get_new_card_id()
 
