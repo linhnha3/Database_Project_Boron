@@ -5,7 +5,7 @@ from datetime import datetime
 from search import search
 from checkout import checkout_book
 from checkin import checkin_book   
-from fines import update_fines, pay_fines
+from fines import update_fines, manage_fines
 from borrower import add_borrower
 
 
@@ -244,9 +244,13 @@ def checkout_book_gui():
         messagebox.showinfo("Checkout", result)
 
 def pay_fines_gui():
+    # addTestFines()
     update_fines()
-    pay_fines()
-    messagebox.showinfo("Pay Fines", "Fines updated and payment complete (or see terminal for details).")
+    card_id = simpledialog.askstring("Pay Fines", "Enter Borrower's Card ID:")
+    if card_id is None:
+        return
+    result = manage_fines(card_id)
+    messagebox.showinfo("Pay Fines", result)
 
 def add_borrower_gui():
     add_borrower()
