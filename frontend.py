@@ -22,23 +22,6 @@ def show_large_popup(title, text):
     close_button = tk.Button(popup, text="Close", command=popup.destroy)
     close_button.pack(pady=5)
 
-""" Deprecated method
-def search_books():
-    query = simpledialog.askstring("Search Books", "Enter search term (ISBN, Title, or Author):")
-    if query:
-        results = search(query, return_results=True)
-        if not results:
-            messagebox.showinfo("Results", "No matching books found.")
-            return
-
-        result_text = "Matching Books:\n"
-        for i, row in enumerate(results, 1):
-            result_text += f"{i}: {row['Isbn']} | {row['Title']} | {row['Authors']} | {row['Status']}\n"
-
-        show_large_popup("Search Results", result_text)
-"""
-
-
 def get_book_status(isbn):
     """
     Checks if a book is currently available or checked out by querying BOOK_LOANS.
@@ -311,10 +294,10 @@ def confirm_checkin(loan_id):
 
 def main():
     root = tk.Tk()
-    root.title("\ud83d\udcda Library Management System \ud83d\udcda")
+    root.title("\ud83d\udcda Library Boron Management System \ud83d\udcda")
     root.geometry("450x550")
 
-    title_label = tk.Label(root, text="Welcome to Library System", font=("Arial", 20))
+    title_label = tk.Label(root, text="Welcome to Library Boron", font=("Arial", 20))
     title_label.pack(pady=20)
 
     # Define buttons and actions
